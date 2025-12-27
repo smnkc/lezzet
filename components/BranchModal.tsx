@@ -169,7 +169,7 @@ const BranchModal: React.FC<BranchModalProps> = ({
                             <p className="text-xs text-slate-400 mt-1 max-w-[200px] mx-auto">
                                 {canOpenNewBranch 
                                     ? "Mevcut şube maksimum seviyede. Büyüme zamanı!" 
-                                    : "Mevcut şubeyi tamamen geliştirmeden yeni şube açamazsın."}
+                                    : "Mevcut şube itibarı 100 olmadan yeni şube açamazsın."}
                             </p>
                         </div>
                         

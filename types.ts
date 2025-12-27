@@ -43,7 +43,9 @@ export interface CustomerGroup {
 }
 
 export type UpgradeType = 'SPEED_COOKING' | 'PREMIUM_MENU' | 'MARKETING' | 'WAITER_SPEED' | 'TIP_JAR' | 'MUSIC_SYSTEM';
-export type DifficultyLevel = 'EASY' | 'NORMAL' | 'HARD' | 'CRACK';
+export type DifficultyLevel = 'EASY' | 'NORMAL' | 'HARD' | 'CRACK' | 'NO_CHEF_DEFAULT';
+export type GameMode = 'OLD_CLASSIC' | 'NEW_MODERN';
+export type ChefMode = 'WITH_CHEF' | 'NO_CHEF';
 
 export interface Upgrade {
   id: UpgradeType;
@@ -71,6 +73,8 @@ export interface Branch {
 
 export interface GameState {
   gameStarted: boolean;
+  gameMode: GameMode;
+  chefMode: ChefMode;
   difficulty: DifficultyLevel;
   chefCost: number;
   money: number; // Global Shared Money

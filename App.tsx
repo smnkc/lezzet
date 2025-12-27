@@ -8,7 +8,9 @@ import {
   UpgradeType,
   DifficultyLevel,
   Branch,
-  CustomerType
+  CustomerType,
+  GameMode,
+  ChefMode
 } from './types';
 import { 
   INITIAL_TABLES_COUNT, 
@@ -40,7 +42,7 @@ import TableComponent from './components/TableComponent';
 import Sidebar from './components/Sidebar';
 import UpgradeModal from './components/UpgradeModal';
 import BranchModal from './components/BranchModal';
-import { PlusCircle, LayoutGrid, Baby, User, Skull, ChefHat, Zap } from 'lucide-react';
+import { PlusCircle, LayoutGrid, Baby, User, Skull, ChefHat, Zap, Clock, Rocket, Play, Ban } from 'lucide-react';
 
 const App: React.FC = () => {
   
@@ -82,6 +84,8 @@ const App: React.FC = () => {
   // --- Initialize State ---
   const [gameState, setGameState] = useState<GameState>({
     gameStarted: false,
+    gameMode: 'NEW_MODERN',
+    chefMode: 'WITH_CHEF',
     difficulty: 'NORMAL',
     chefCost: DIFFICULTY_SETTINGS.NORMAL.chefCost,
     money: 300, 
@@ -91,6 +95,9 @@ const App: React.FC = () => {
     isUpgradeModalOpen: false,
     isBranchModalOpen: false
   });
+
+  // Setup Wizard State
+  const [setupStep, setSetupStep] = useState<number>(0); // 0: Game Mode, 1: Chef Mode, 2: Difficulty
 
   const [tick, setTick] = useState(0);
 
@@ -112,14 +119,15 @@ const App: React.FC = () => {
 
   const checkCanOpenNewBranch = (state: GameState) => {
       if (state.branches.length >= MAX_BRANCHES) return false;
+      
+      // Requirement 1: Money
       if (state.money < COST_NEW_BRANCH) return false;
       
+      // Requirement 2: 100 Reputation in current branch
       const currentBranch = state.branches[state.activeBranchIndex];
-      const allMaxed = Object.values(UPGRADE_DEFINITIONS).every(def => 
-          currentBranch.upgrades[def.id] >= def.maxLevel
-      );
+      if (currentBranch.reputation < 100) return false;
       
-      return allMaxed;
+      return true;
   };
 
   // --- Passive Income Calculation for Background Branches ---
@@ -136,10 +144,13 @@ const App: React.FC = () => {
       setTick(t => t + 1);
       
       setGameState(currentState => {
-        let { branches, activeBranchIndex, money, notifications } = currentState;
+        let { branches, activeBranchIndex, money, notifications, gameMode } = currentState;
         let newBranches = [...branches];
         let newMoney = money;
         let activeBranch = { ...newBranches[activeBranchIndex] }; // Shallow copy of active branch
+
+        // --- OLD CLASSIC MODE: Auto Switch REMOVED ---
+        // User now manually triggers next branch via sidebar button
 
         // --- 1. PROCESS BACKGROUND BRANCHES (Passive Income) ---
         let totalPassiveIncome = 0;
@@ -386,6 +397,7 @@ const App: React.FC = () => {
 
         return {
           ...currentState,
+          activeBranchIndex, // Needed for Old Mode branch switching
           branches: newBranches,
           money: newMoney,
           notifications
@@ -398,15 +410,26 @@ const App: React.FC = () => {
 
   // --- Interaction Handlers ---
 
+  const selectGameMode = (mode: GameMode) => {
+      setGameState(prev => ({ ...prev, gameMode: mode }));
+      setSetupStep(1);
+  };
+
+  const selectChefMode = (mode: ChefMode) => {
+      setGameState(prev => ({ ...prev, chefMode: mode }));
+      // Always go to difficulty selection now, so user can select CRACK for No Chef
+      setSetupStep(2);
+  };
+
   const startGame = (difficulty: DifficultyLevel) => {
-      const settings = DIFFICULTY_SETTINGS[difficulty];
+      const settings = DIFFICULTY_SETTINGS[difficulty as keyof typeof DIFFICULTY_SETTINGS];
       
       setGameState(prev => ({
           ...prev,
           gameStarted: true,
           difficulty: difficulty,
           chefCost: settings.chefCost,
-          money: settings.startMoney // Initialize money based on difficulty
+          money: settings.startMoney 
       }));
   };
 
@@ -490,6 +513,7 @@ const App: React.FC = () => {
   };
 
   const hireChef = () => {
+      if (gameState.chefMode === 'NO_CHEF') return;
       if (gameState.money >= gameState.chefCost) {
           setGameState(prev => ({ ...prev, money: prev.money - prev.chefCost }));
           updateCurrentBranch(b => ({ ...b, isChefHired: true, isChefActive: true }));
@@ -581,57 +605,129 @@ const App: React.FC = () => {
       }
   };
 
-  // --- Render ---
-
+  // --- Render Start Screen Wizard ---
   if (!gameState.gameStarted) {
       return (
           <div className="flex h-screen w-screen bg-slate-900 items-center justify-center relative overflow-hidden">
                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=2574&auto=format&fit=crop')] bg-cover bg-center opacity-20 blur-sm"></div>
-               <div className="relative z-10 bg-slate-800/90 backdrop-blur-md p-8 rounded-2xl border-2 border-amber-600 shadow-2xl max-w-3xl w-full text-center">
+               <div className="relative z-10 bg-slate-800/90 backdrop-blur-md p-8 rounded-2xl border-2 border-amber-600 shadow-2xl max-w-4xl w-full text-center">
+                   
                    <div className="mb-8">
                        <ChefHat className="w-16 h-16 text-amber-500 mx-auto mb-4" />
                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-600 mb-2">LEZZET USTASI</h1>
-                       <p className="text-slate-400">Restoran zincirini kurmaya hazır mısın?</p>
+                       <p className="text-slate-400">Restoran İmparatorluğunu Kur</p>
                    </div>
-                   <h3 className="text-white font-bold mb-6 text-xl">Zorluk Seviyesi Seç</h3>
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                       {/* Difficulty Buttons */}
-                       {(Object.keys(DIFFICULTY_SETTINGS) as DifficultyLevel[]).map(diff => {
-                           const setting = DIFFICULTY_SETTINGS[diff];
-                           const isCrack = diff === 'CRACK';
-                           return (
-                               <button 
-                                key={diff} 
-                                onClick={() => startGame(diff)} 
-                                className={`
-                                    relative overflow-hidden p-4 rounded-xl transition-all border-2 flex flex-col items-center justify-between min-h-[140px]
-                                    ${isCrack 
-                                        ? 'bg-purple-900/50 hover:bg-purple-900 border-purple-500 hover:border-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.5)] group' 
-                                        : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600 hover:border-amber-500'
-                                    }
-                                `}
-                               >
-                                   {isCrack && <div className="absolute top-0 right-0 p-1"><Zap className="w-4 h-4 text-purple-300 animate-pulse" /></div>}
-                                   
-                                   <div className="text-center">
-                                       <div className={`text-xl font-bold mb-1 ${isCrack ? 'text-purple-300 group-hover:text-white' : 'text-white'}`}>{setting.label}</div>
-                                       <div className="text-xs text-slate-400 mb-2 leading-tight">{setting.description}</div>
+
+                   {/* Step 0: Game Mode Selection */}
+                   {setupStep === 0 && (
+                       <div className="animate-in fade-in duration-300">
+                           <h3 className="text-white font-bold mb-6 text-xl">Oyun Modunu Seç</h3>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                               <button onClick={() => selectGameMode('OLD_CLASSIC')} className="bg-slate-700/50 hover:bg-slate-700 border-2 border-slate-600 hover:border-amber-500 p-6 rounded-xl transition-all group text-left">
+                                   <div className="flex items-center justify-between mb-4">
+                                       <span className="text-2xl font-black text-amber-400">ESKİ USÜL</span>
+                                       <Clock className="w-8 h-8 text-slate-400 group-hover:text-amber-400" />
                                    </div>
-                                   
-                                   <div className="text-center w-full">
-                                       <div className={`font-bold text-sm ${isCrack ? 'text-green-400' : 'text-amber-400'}`}>
-                                           Şef: ${setting.chefCost}
-                                       </div>
-                                       {setting.startMoney > 300 && (
-                                            <div className="text-xs text-green-300 mt-1 font-mono">
-                                                +${setting.startMoney} Başlangıç
-                                            </div>
-                                       )}
-                                   </div>
+                                   <p className="text-slate-300 text-sm mb-2">
+                                       • $5000 + 100 İtibar yapınca yeni şube açılır.<br/>
+                                       • Eski şubeler pasif gelir ($50) sağlar.<br/>
+                                       • Basit ve çizgisel ilerleme.
+                                   </p>
                                </button>
-                           );
-                       })}
-                   </div>
+
+                               <button onClick={() => selectGameMode('NEW_MODERN')} className="bg-slate-700/50 hover:bg-slate-700 border-2 border-slate-600 hover:border-purple-500 p-6 rounded-xl transition-all group text-left">
+                                   <div className="flex items-center justify-between mb-4">
+                                       <span className="text-2xl font-black text-purple-400">YENİ NESİL</span>
+                                       <Rocket className="w-8 h-8 text-slate-400 group-hover:text-purple-400" />
+                                   </div>
+                                   <p className="text-slate-300 text-sm mb-2">
+                                       • Şubeleri dilediğin gibi yönet ve geliştir.<br/>
+                                       • İstediğin zaman şubeler arası geçiş yap.<br/>
+                                       • Detaylı yönetim paneli.
+                                   </p>
+                               </button>
+                           </div>
+                       </div>
+                   )}
+
+                   {/* Step 1: Chef Mode Selection */}
+                   {setupStep === 1 && (
+                       <div className="animate-in fade-in slide-in-from-right-8 duration-300">
+                           <h3 className="text-white font-bold mb-6 text-xl">Şef Tercihi</h3>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                               <button onClick={() => selectChefMode('WITH_CHEF')} className="bg-slate-700/50 hover:bg-slate-700 border-2 border-slate-600 hover:border-indigo-500 p-6 rounded-xl transition-all group flex flex-col items-center">
+                                   <ChefHat className="w-12 h-12 text-indigo-400 mb-4 group-hover:scale-110 transition-transform" />
+                                   <div className="text-2xl font-bold text-white mb-2">ŞEFLİ OYUN</div>
+                                   <p className="text-slate-400 text-sm">Şef kiralayarak otomatik masa yerleştirme ve garson atama özelliklerini kullanabilirsin.</p>
+                               </button>
+
+                               <button onClick={() => selectChefMode('NO_CHEF')} className="bg-slate-700/50 hover:bg-slate-700 border-2 border-slate-600 hover:border-red-500 p-6 rounded-xl transition-all group flex flex-col items-center">
+                                   <Ban className="w-12 h-12 text-red-400 mb-4 group-hover:scale-110 transition-transform" />
+                                   <div className="text-2xl font-bold text-white mb-2">ŞEFSİZ (ZOR)</div>
+                                   <p className="text-slate-400 text-sm">Şef yok, otomasyon yok. Her masayı ve garsonu tek tek yönetmelisin.</p>
+                               </button>
+                           </div>
+                           <button onClick={() => setSetupStep(0)} className="mt-8 text-slate-500 hover:text-white underline">Geri Dön</button>
+                       </div>
+                   )}
+
+                   {/* Step 2: Difficulty Selection (NOW FOR BOTH MODES) */}
+                   {setupStep === 2 && (
+                       <div className="animate-in fade-in slide-in-from-right-8 duration-300">
+                           <h3 className="text-white font-bold mb-6 text-xl">Zorluk Seviyesi Seç</h3>
+                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 justify-center">
+                               {/* Filter difficulties: If NO_CHEF, only show NORMAL and CRACK */}
+                               {(Object.keys(DIFFICULTY_SETTINGS) as DifficultyLevel[])
+                                .filter(diff => {
+                                    if (gameState.chefMode === 'NO_CHEF') {
+                                        return diff === 'NORMAL' || diff === 'CRACK';
+                                    }
+                                    return true;
+                                })
+                                .map(diff => {
+                                   const setting = DIFFICULTY_SETTINGS[diff];
+                                   const isCrack = diff === 'CRACK';
+                                   // If No Chef mode, don't show "Chef Cost" in the card, or show it as disabled/irrelevant
+                                   const isNoChef = gameState.chefMode === 'NO_CHEF';
+
+                                   return (
+                                       <button 
+                                        key={diff} 
+                                        onClick={() => startGame(diff)} 
+                                        className={`
+                                            relative overflow-hidden p-4 rounded-xl transition-all border-2 flex flex-col items-center justify-between min-h-[140px]
+                                            ${isCrack 
+                                                ? 'bg-purple-900/50 hover:bg-purple-900 border-purple-500 hover:border-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.5)] group' 
+                                                : 'bg-slate-700/50 hover:bg-slate-700 border-slate-600 hover:border-amber-500'
+                                            }
+                                        `}
+                                       >
+                                           {isCrack && <div className="absolute top-0 right-0 p-1"><Zap className="w-4 h-4 text-purple-300 animate-pulse" /></div>}
+                                           
+                                           <div className="text-center">
+                                               <div className={`text-xl font-bold mb-1 ${isCrack ? 'text-purple-300 group-hover:text-white' : 'text-white'}`}>{setting.label}</div>
+                                               <div className="text-xs text-slate-400 mb-2 leading-tight">{setting.description}</div>
+                                           </div>
+                                           
+                                           <div className="text-center w-full">
+                                               {!isNoChef && (
+                                                   <div className={`font-bold text-sm ${isCrack ? 'text-green-400' : 'text-amber-400'}`}>
+                                                       Şef: ${setting.chefCost}
+                                                   </div>
+                                               )}
+                                               {setting.startMoney > 300 && (
+                                                    <div className="text-xs text-green-300 mt-1 font-mono">
+                                                        +${setting.startMoney} Başlangıç
+                                                    </div>
+                                               )}
+                                           </div>
+                                       </button>
+                                   );
+                               })}
+                           </div>
+                           <button onClick={() => setSetupStep(1)} className="mt-8 text-slate-500 hover:text-white underline">Geri Dön</button>
+                       </div>
+                   )}
                </div>
           </div>
       );
@@ -750,12 +846,15 @@ const App: React.FC = () => {
         isChefHired={currentBranch.isChefHired}
         isChefActive={currentBranch.isChefActive}
         chefCost={gameState.chefCost}
+        gameMode={gameState.gameMode}
+        chefMode={gameState.chefMode}
         canOpenNewBranch={checkCanOpenNewBranch(gameState)}
         onFireWaiter={fireWaiter}
         onHireChef={hireChef}
         onToggleChef={toggleChef}
         onOpenUpgrades={() => setGameState(prev => ({ ...prev, isUpgradeModalOpen: true }))}
         onOpenBranchModal={() => setGameState(prev => ({ ...prev, isBranchModalOpen: true }))}
+        onOpenNewBranch={handleOpenNewBranch}
       />
     </div>
   );
